@@ -2,32 +2,69 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: agent-console-api
+  labels:
+    app.kubernetes.io/name: agent-console-api
+    app.kubernetes.io/part-of: agent-console
 spec:
   replicas: {{ .Values.api.replicas }}
   selector:
     matchLabels:
-      app: agent-console-api
+      app.kubernetes.io/name: agent-console-api
   template:
     metadata:
       labels:
-        app: agent-console-api
+        app.kubernetes.io/name: agent-console-api
+        app.kubernetes.io/part-of: agent-console
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: api
           image: {{ .Values.api.image }}
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: {{ .Values.api.port }}
+            - name: http
+              containerPort: {{ .Values.api.port }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: {{ .Values.api.resources.requests.cpu }}
+              memory: {{ .Values.api.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.api.resources.limits.cpu }}
+              memory: {{ .Values.api.resources.limits.memory }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: agent-console-api
+  labels:
+    app.kubernetes.io/name: agent-console-api
+    app.kubernetes.io/part-of: agent-console
 spec:
+  type: ClusterIP
   selector:
-    app: agent-console-api
+    app.kubernetes.io/name: agent-console-api
   ports:
     - name: http
       port: {{ .Values.api.port }}
-      targetPort: {{ .Values.api.port }}
+      targetPort: http
